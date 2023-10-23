@@ -53,8 +53,11 @@ fn is_valid_turn(current: Direction, new: Direction) -> bool {
 
 fn starting_snake(head_id: EntityId) -> Entity {
     Entity::new()
-        .with(frames_until_move(), STARTING_FRAMES_PER_SQUARE)
-        .with(frames_per_square(), STARTING_FRAMES_PER_SQUARE)
+        .with(
+            frames_until_move(),
+            (60. / STARTING_SQUARES_PER_SECOND) as u32,
+        )
+        .with(squares_per_second(), STARTING_SQUARES_PER_SECOND)
         .with(snake_direction(), Direction::Right)
         .with(snake_turns(), Vec::new())
         .with(snake_current_length(), 1)
@@ -270,8 +273,8 @@ pub fn main() {
                                 *l += LENGTH_PER_FOOD
                             })
                             .unwrap();
-                            entity::mutate_component(player_id, frames_per_square(), |s| {
-                                *s = (*s as f32 * FRAMES_PER_SQUARE_PER_FOOD) as u32
+                            entity::mutate_component(player_id, squares_per_second(), |s| {
+                                *s += ACCELERATION_PER_FOOD
                             })
                             .unwrap();
                             // force food spawning
@@ -303,7 +306,9 @@ pub fn main() {
                     }
 
                     // reset move counter
-                    until_move = entity::get_component(player_id, frames_per_square()).unwrap();
+                    until_move = (60.
+                        / entity::get_component(player_id, squares_per_second()).unwrap())
+                        as u32;
                 }
                 entity::set_component(player_id, frames_until_move(), until_move);
             }

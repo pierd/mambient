@@ -7,7 +7,7 @@ ambient_version = "0.3.0"
 description = "Snake game in Ambient (Mamba + Ambient)"
 
 [components]
-frames_per_square = { type = "U32", name = "Snake speed in frames it takes to move one square", attributes = ["Debuggable"] }
+squares_per_second = { type = "F32", name = "Snake speed in squares per second", attributes = ["Debuggable"] }
 frames_until_move = { type = "U32", name = "Frames until next player move", attributes = ["Debuggable"] }
 frames_until_food = { type = "U32", name = "Frames until next food is spawned", attributes = ["Debuggable"] }
 snake_current_length = { type = "U32", name = "Current length of player's snake", attributes = ["Debuggable"] }
