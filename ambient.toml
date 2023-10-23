@@ -4,6 +4,7 @@ name = "mambient"
 version = "0.0.1"
 content = { type = "Playable" }
 ambient_version = "0.3.0"
+description = "Snake game in Ambient (Mamba + Ambient)"
 
 [components]
 frames_per_square = { type = "U32", name = "Snake speed in frames it takes to move one square", attributes = ["Debuggable"] }

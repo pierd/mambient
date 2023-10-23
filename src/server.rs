@@ -165,8 +165,12 @@ pub fn main() {
                     1.,
                     0.5,
                 )));
-                let player_color =
-                    vec4(player_color.red, player_color.green, player_color.blue, 1.);
+                let player_color = vec4(
+                    player_color.red * 256.,
+                    player_color.green * 256.,
+                    player_color.blue * 256.,
+                    1.,
+                );
                 entity::add_component(player_id, color(), player_color);
 
                 let position = uvec2(2, random::<u32>() % (GRID_HEIGHT - 2) + 1);
