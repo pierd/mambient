@@ -1,0 +1,38 @@
+[package]
+id = "mambientbykuba4alochnmya43uopcya"
+name = "mambient"
+version = "0.0.1"
+content = { type = "Playable" }
+ambient_version = "0.3.0"
+
+[components]
+frames_per_square = { type = "U32", name = "Snake speed in frames it takes to move one square", attributes = ["Debuggable"] }
+frames_until_move = { type = "U32", name = "Frames until next player move", attributes = ["Debuggable"] }
+frames_until_food = { type = "U32", name = "Frames until next food is spawned", attributes = ["Debuggable"] }
+snake_current_length = { type = "U32", name = "Current length of player's snake", attributes = ["Debuggable"] }
+snake_target_length = { type = "U32", name = "Length that player's snake should be", attributes = ["Debuggable"] }
+snake_direction = { type = "Direction", name = "Direction of player's snake movement", attributes = ["Debuggable"] }
+state = { type = "SquareState", name = "Square state", attributes = ["Debuggable"] }
+snake_head = { type = "EntityId", name = "id of entity representing player's snake head", attributes = ["Debuggable"] }
+snake_tail = { type = "EntityId", name = "id of entity representing player's snake tail", attributes = ["Debuggable"] }
+snake_next = { type = "EntityId", name = "id of entity representing snake's next element (tail->...->head)", attributes = ["Debuggable"] }
+grid_coords = { type = "Uvec2", name = "Coordinates in the grid", attributes = ["Debuggable"] }
+
+[messages.Input.fields]
+direction = "Direction"
+
+[enums.SquareState]
+description = "Describes the state of a square."
+[enums.SquareState.members]
+Empty = "Nothing"
+Snake = "Occupied by a snake"
+Wall = "Wall"
+Food = "Food for snake to eat"
+
+[enums.Direction]
+description = "Snake movement direction"
+[enums.Direction.members]
+Up = "Up"
+Down = "Down"
+Left = "Left"
+Right = "Right"
