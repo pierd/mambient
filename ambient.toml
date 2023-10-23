@@ -15,6 +15,7 @@ snake_target_length = { type = "U32", name = "Length that player's snake should 
 snake_direction = { type = "Direction", name = "Direction of player's snake movement", attributes = ["Debuggable"] }
 snake_turns = { type = { type = "Vec", element_type = "U8" }, name = "Queue of player's snake direction changes", attributes = ["Debuggable"] }
 state = { type = "SquareState", name = "Square state", attributes = ["Debuggable"] }
+player_id = { type = "EntityId", name = "id of player", attributes = ["Debuggable"] }
 snake_head = { type = "EntityId", name = "id of entity representing player's snake head", attributes = ["Debuggable"] }
 snake_tail = { type = "EntityId", name = "id of entity representing player's snake tail", attributes = ["Debuggable"] }
 snake_next = { type = "EntityId", name = "id of entity representing snake's next element (tail->...->head)", attributes = ["Debuggable"] }

@@ -106,6 +106,24 @@ fn set_state(grid_id: EntityId, new_state: FullSquareState) {
     } else {
         entity::add_component(child_id, cube(), ());
     }
+    if let FullSquareState::Snake(pid) = new_state {
+        entity::add_component(child_id, player_id(), pid);
+    }
+}
+
+fn remove_snake(player_id: EntityId) {
+    while entity::get_component(player_id, snake_head())
+        != entity::get_component(player_id, snake_tail())
+    {
+        let tail_id = entity::get_component(player_id, snake_tail()).unwrap();
+        if let Some(next) = entity::get_component(tail_id, snake_next()) {
+            entity::set_component(player_id, snake_tail(), next);
+        }
+        entity::remove_component(tail_id, snake_next());
+        set_state(tail_id, FullSquareState::Empty);
+    }
+    let tail_id = entity::get_component(player_id, snake_tail()).unwrap();
+    set_state(tail_id, FullSquareState::Empty);
 }
 
 #[main]
@@ -181,6 +199,23 @@ pub fn main() {
         }
     });
 
+    despawn_query(is_player()).bind(|results| {
+        for (pid, _) in results {
+            for (id, _) in query(player_id())
+                .build()
+                .evaluate()
+                .into_iter()
+                .filter(|(_, player_id)| *player_id == pid)
+            {
+                if let Some(grid_id) = entity::get_component(id, parent()) {
+                    set_state(grid_id, FullSquareState::Empty);
+                } else {
+                    entity::despawn(id);
+                }
+            }
+        }
+    });
+
     Input::subscribe(|ctx, msg| {
         if let Some(player_id) = ctx.client_entity_id() {
             entity::mutate_component(player_id, snake_turns(), |turns| {
@@ -201,7 +236,6 @@ pub fn main() {
                         entity::set_component(player_id, snake_turns(), turns);
                         let current = entity::get_component(player_id, snake_direction()).unwrap();
                         let new_direction = Direction::try_from(turn).unwrap();
-                        println!("turn: {:?} {:?}", current, new_direction);
                         if is_valid_turn(current, new_direction) {
                             entity::set_component(player_id, snake_direction(), new_direction);
                         }
@@ -222,19 +256,7 @@ pub fn main() {
                         SquareState::Snake | SquareState::Wall => {
                             // snake dies
                             // clear up the old snake
-                            while entity::get_component(player_id, snake_head())
-                                != entity::get_component(player_id, snake_tail())
-                            {
-                                let tail_id =
-                                    entity::get_component(player_id, snake_tail()).unwrap();
-                                if let Some(next) = entity::get_component(tail_id, snake_next()) {
-                                    entity::set_component(player_id, snake_tail(), next);
-                                }
-                                entity::remove_component(tail_id, snake_next());
-                                set_state(tail_id, FullSquareState::Empty);
-                            }
-                            let tail_id = entity::get_component(player_id, snake_tail()).unwrap();
-                            set_state(tail_id, FullSquareState::Empty);
+                            remove_snake(player_id);
                             // set up a new one
                             let position = uvec2(2, random::<u32>() % (GRID_HEIGHT - 2) + 1);
                             let head_id = grid[position.x as usize][position.y as usize];
@@ -282,8 +304,6 @@ pub fn main() {
 
                     // reset move counter
                     until_move = entity::get_component(player_id, frames_per_square()).unwrap();
-
-                    println!("{:?}", entity::get_all_components(player_id));
                 }
                 entity::set_component(player_id, frames_until_move(), until_move);
             }
