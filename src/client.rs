@@ -60,15 +60,15 @@ pub fn main() {
         });
 
     Frame::subscribe(|_| {
-        let input = input::get();
+        let (delta, _) = input::get_delta();
 
-        let direction = if input.keys.contains(&KeyCode::Up) || input.keys.contains(&KeyCode::W) {
+        let direction = if delta.keys.contains(&KeyCode::Up) || delta.keys.contains(&KeyCode::W) {
             Some(Direction::Up)
-        } else if input.keys.contains(&KeyCode::Down) || input.keys.contains(&KeyCode::S) {
+        } else if delta.keys.contains(&KeyCode::Down) || delta.keys.contains(&KeyCode::S) {
             Some(Direction::Down)
-        } else if input.keys.contains(&KeyCode::Left) || input.keys.contains(&KeyCode::A) {
+        } else if delta.keys.contains(&KeyCode::Left) || delta.keys.contains(&KeyCode::A) {
             Some(Direction::Left)
-        } else if input.keys.contains(&KeyCode::Right) || input.keys.contains(&KeyCode::D) {
+        } else if delta.keys.contains(&KeyCode::Right) || delta.keys.contains(&KeyCode::D) {
             Some(Direction::Right)
         } else {
             None

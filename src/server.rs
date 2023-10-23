@@ -2,12 +2,10 @@ use std::sync::Arc;
 
 use ambient_api::{
     core::{
+        hierarchy::components::{children, parent},
         messages::Frame,
         player::components::is_player,
-        primitives::{
-            components::{cube, sphere, sphere_radius, sphere_sectors, sphere_stacks},
-            concepts::Sphere,
-        },
+        primitives::{components::cube, concepts::Sphere},
         rendering::components::color,
         transform::components::{scale, translation},
     },
@@ -21,16 +19,93 @@ use packages::this::{
     messages::Input,
     types::{Direction, SquareState},
 };
+use palette::FromColor;
+
+impl TryFrom<u8> for Direction {
+    type Error = u8;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Up),
+            1 => Ok(Self::Down),
+            2 => Ok(Self::Left),
+            3 => Ok(Self::Right),
+            _ => Err(value),
+        }
+    }
+}
+
+fn is_valid_turn(current: Direction, new: Direction) -> bool {
+    !matches!(
+        (current, new),
+        (
+            Direction::Up | Direction::Down,
+            Direction::Up | Direction::Down
+        )
+    ) && !matches!(
+        (current, new),
+        (
+            Direction::Left | Direction::Right,
+            Direction::Left | Direction::Right
+        )
+    )
+}
 
 fn starting_snake(head_id: EntityId) -> Entity {
     Entity::new()
         .with(frames_until_move(), STARTING_FRAMES_PER_SQUARE)
         .with(frames_per_square(), STARTING_FRAMES_PER_SQUARE)
         .with(snake_direction(), Direction::Right)
+        .with(snake_turns(), Vec::new())
         .with(snake_current_length(), 1)
         .with(snake_target_length(), STARTING_LENGTH)
         .with(snake_head(), head_id)
         .with(snake_tail(), head_id)
+}
+
+#[derive(Clone, Copy, Debug)]
+enum FullSquareState {
+    Empty,
+    Snake(EntityId),
+    Wall,
+    Food,
+}
+
+impl From<FullSquareState> for SquareState {
+    fn from(value: FullSquareState) -> Self {
+        match value {
+            FullSquareState::Empty => Self::Empty,
+            FullSquareState::Snake(_) => Self::Snake,
+            FullSquareState::Wall => Self::Wall,
+            FullSquareState::Food => Self::Food,
+        }
+    }
+}
+
+fn set_state(grid_id: EntityId, new_state: FullSquareState) {
+    entity::set_component(grid_id, state(), new_state.into());
+    for id in entity::get_component(grid_id, children()).unwrap_or_default() {
+        entity::despawn(id);
+    }
+    let child_id = entity::get_components(grid_id, &[&translation(), &scale()])
+        .with(
+            color(),
+            match new_state {
+                FullSquareState::Empty => EMPTY_COLOR,
+                FullSquareState::Snake(player_id) => {
+                    entity::get_component(player_id, color()).unwrap_or(vec4(128., 128., 128., 1.))
+                }
+                FullSquareState::Wall => WALL_COLOR,
+                FullSquareState::Food => vec4(0xff as f32, 0xf7 as f32, 0., 1.),
+            },
+        )
+        .with(parent(), grid_id)
+        .spawn();
+    if matches!(new_state, FullSquareState::Food) {
+        entity::add_components(child_id, Sphere::suggested().make());
+    } else {
+        entity::add_component(child_id, cube(), ());
+    }
 }
 
 #[main]
@@ -43,7 +118,7 @@ pub fn main() {
                 .map(|y| {
                     let wall =
                         [0, GRID_WIDTH - 1].contains(&x) || [0, GRID_HEIGHT - 1].contains(&y);
-                    Entity::new()
+                    let id = Entity::new()
                         .with(scale(), vec3(x_size, y_size, 1.))
                         .with(
                             translation(),
@@ -53,25 +128,18 @@ pub fn main() {
                                 0.,
                             ),
                         )
-                        .with(
-                            state(),
-                            if wall {
-                                SquareState::Wall
-                            } else {
-                                SquareState::Empty
-                            },
-                        )
-                        .with(cube(), ())
-                        .with(
-                            color(),
-                            if wall {
-                                vec4(255., 255., 255., 1.)
-                            } else {
-                                vec4(0., 0., 0., 1.)
-                            },
-                        )
+                        .with(state(), SquareState::Empty)
                         .with(grid_coords(), uvec2(x, y))
-                        .spawn()
+                        .spawn();
+                    set_state(
+                        id,
+                        if wall {
+                            FullSquareState::Wall
+                        } else {
+                            FullSquareState::Empty
+                        },
+                    );
+                    id
                 })
                 .collect()
         })
@@ -84,49 +152,26 @@ pub fn main() {
         FRAMES_PER_FOOD_SPAWN,
     );
 
-    change_query((grid_coords(), state(), color()))
-        .track_change(state())
-        .bind(|results| {
-            for (entity_id, (_, state, _)) in results {
-                let is_cube = entity::has_component(entity_id, cube());
-                let should_be_cube = state != SquareState::Food;
-                if is_cube != should_be_cube {
-                    if should_be_cube {
-                        entity::remove_components(
-                            entity_id,
-                            &[
-                                &sphere(),
-                                &sphere_radius(),
-                                &sphere_sectors(),
-                                &sphere_stacks(),
-                            ],
-                        );
-                        entity::add_component(entity_id, cube(), ());
-                    } else {
-                        entity::remove_component(entity_id, cube());
-                        entity::add_components(entity_id, Sphere::suggested().make());
-                    }
-                }
-                entity::set_component(
-                    entity_id,
-                    color(),
-                    match state {
-                        SquareState::Empty => vec4(0., 0., 0., 1.),
-                        SquareState::Snake => vec4(10., 10., 10., 1.),
-                        SquareState::Wall => vec4(255., 255., 255., 1.),
-                        SquareState::Food => vec4(120., 120., 120., 1.),
-                    },
-                );
-            }
-        });
-
     spawn_query(is_player()).bind({
         let grid = grid.clone();
         move |results| {
+            if !results.is_empty() {
+                // force food spawning
+                entity::set_component(entity::resources(), frames_until_food(), 0);
+            }
             for (player_id, _) in results {
+                let player_color = palette::Srgb::from_color(palette::Hsl::from_components((
+                    360. * random::<f32>(),
+                    1.,
+                    0.5,
+                )));
+                let player_color =
+                    vec4(player_color.red, player_color.green, player_color.blue, 1.);
+                entity::add_component(player_id, color(), player_color);
+
                 let position = uvec2(2, random::<u32>() % (GRID_HEIGHT - 2) + 1);
                 let head_id = grid[position.x as usize][position.y as usize];
-                entity::set_component(head_id, state(), SquareState::Snake);
+                set_state(head_id, FullSquareState::Snake(player_id));
                 entity::add_components(player_id, starting_snake(head_id));
             }
         }
@@ -134,13 +179,9 @@ pub fn main() {
 
     Input::subscribe(|ctx, msg| {
         if let Some(player_id) = ctx.client_entity_id() {
-            let current = entity::get_component(player_id, snake_direction()).unwrap();
-            match (current, msg.direction) {
-                (Direction::Up | Direction::Down, Direction::Up | Direction::Down) => return,
-                (Direction::Left | Direction::Right, Direction::Left | Direction::Right) => return,
-                _ => {}
-            }
-            entity::set_component(player_id, snake_direction(), msg.direction);
+            entity::mutate_component(player_id, snake_turns(), |turns| {
+                turns.insert(0, msg.direction as u8)
+            });
         }
     });
 
@@ -150,6 +191,17 @@ pub fn main() {
             for (player_id, (_, mut until_move)) in results {
                 until_move = until_move.saturating_sub(1);
                 if until_move == 0 {
+                    // apply a turn if there's one
+                    let mut turns = entity::get_component(player_id, snake_turns()).unwrap();
+                    if let Some(turn) = turns.pop() {
+                        entity::set_component(player_id, snake_turns(), turns);
+                        let current = entity::get_component(player_id, snake_direction()).unwrap();
+                        let new_direction = Direction::try_from(turn).unwrap();
+                        println!("turn: {:?} {:?}", current, new_direction);
+                        if is_valid_turn(current, new_direction) {
+                            entity::set_component(player_id, snake_direction(), new_direction);
+                        }
+                    }
                     // move the head
                     let head_id = entity::get_component(player_id, snake_head()).unwrap();
                     let position = entity::get_component(head_id, grid_coords()).unwrap();
@@ -175,14 +227,14 @@ pub fn main() {
                                     entity::set_component(player_id, snake_tail(), next);
                                 }
                                 entity::remove_component(tail_id, snake_next());
-                                entity::set_component(tail_id, state(), SquareState::Empty);
+                                set_state(tail_id, FullSquareState::Empty);
                             }
                             let tail_id = entity::get_component(player_id, snake_tail()).unwrap();
-                            entity::set_component(tail_id, state(), SquareState::Empty);
+                            set_state(tail_id, FullSquareState::Empty);
                             // set up a new one
                             let position = uvec2(2, random::<u32>() % (GRID_HEIGHT - 2) + 1);
                             let head_id = grid[position.x as usize][position.y as usize];
-                            entity::set_component(head_id, state(), SquareState::Snake);
+                            set_state(head_id, FullSquareState::Snake(player_id));
                             entity::set_components(player_id, starting_snake(head_id));
                             continue;
                         }
@@ -192,12 +244,16 @@ pub fn main() {
                                 *l += LENGTH_PER_FOOD
                             })
                             .unwrap();
+                            entity::mutate_component(player_id, frames_per_square(), |s| {
+                                *s = (*s as f32 * FRAMES_PER_SQUARE_PER_FOOD) as u32
+                            })
+                            .unwrap();
                             // force food spawning
                             entity::set_component(entity::resources(), frames_until_food(), 0);
                         }
                     }
                     entity::add_component(head_id, snake_next(), new_head_id);
-                    entity::set_component(new_head_id, state(), SquareState::Snake);
+                    set_state(new_head_id, FullSquareState::Snake(player_id));
                     entity::set_component(player_id, snake_head(), new_head_id);
                     let mut current_len =
                         entity::mutate_component(player_id, snake_current_length(), |l| *l += 1)
@@ -208,7 +264,7 @@ pub fn main() {
                         entity::get_component(player_id, snake_target_length()).unwrap();
                     while current_len > target_len {
                         let tail_id = entity::get_component(player_id, snake_tail()).unwrap();
-                        entity::set_component(tail_id, state(), SquareState::Empty);
+                        set_state(tail_id, FullSquareState::Empty);
                         if let Some(next) = entity::get_component(tail_id, snake_next()) {
                             entity::set_component(player_id, snake_tail(), next);
                         }
@@ -256,7 +312,7 @@ pub fn main() {
                             break id;
                         }
                     };
-                    entity::set_component(id, state(), SquareState::Food);
+                    set_state(id, FullSquareState::Food);
                 }
                 until_food = FRAMES_PER_FOOD_SPAWN;
             }
